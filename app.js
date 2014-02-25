@@ -9,8 +9,8 @@ var port    = process.env.OPENSHIFT_INTERNAL_PORT || 8080;
 var mongo_host = 'memorial02.cloudapp.net';
 var mongo_port = mongo.Connection.DEFAULT_PORT || 27017;
 
-//http.createServer(function (req, res) {}).listen(port, ipaddr);
-
+console.log("Server starting at http://" + ipaddr + ":" + port + "/");
+console.log("Connecting to database...");
 var db = new mongo.Db('Podvig', new mongo.Server(mongo_host, mongo_port, {}), {safe:false});
 db.open( function(err, db){
     console.log(err || " Connected to db!");
@@ -28,7 +28,7 @@ app.use(function(req, res) {
         if(u.pathname == "/get"){
             getItems(u, req, res);
         } else if(u.pathname == "/update"){
-            updateItems(u, req, res);
+            updateItem(u, req, res);
         } else if(u.pathname == "/delete"){
             deleteItems(u, req, res);
         } else if(u.pathname == "/add"){
@@ -43,33 +43,34 @@ app.use(function(req, res) {
 
 function addItems(u, req, res) {
     var collection = u.query.collection;
-    var items = u.query.items.split(",");
+    var items = u.query.items || req.body;
     db.collection(collection, function(err, coll) {
         coll.insert(items, {safe:true}, function(err, result) {
             if (err) {
-                res.end({'error':'An error has occurred'});
+                res.end("{'error':'An error has occurred" + err + "'}");
             } else {
-                console.log('Success: ' + JSON.stringify(result[0]));
-                res.end(result[0]);
+                var r =  JSON.stringify(result);
+                console.log('Success: ' + r);
+                res.end(r);
             }
         });
     })
 }
 
-function updateItems(u, req, res) {
+function updateItem(u, req, res) {
     var collection = u.query.collection;
-    var id = req.params.id;
+    var id = u.query.id;
     var item = req.body;
     console.log('Updating item: ' + id);
     console.log(JSON.stringify(item));
     db.collection(collection, function(err, collection) {
-        collection.update({'_id':new BSON.ObjectID(id)}, item, {safe:true}, function(err, result) {
+        collection.update({'_id':new mongo.ObjectID(id)}, item, {safe:true}, function(err, result) {
             if (err) {
                 console.log('Error updating item: ' + err);
-                res.end({'error':'An error has occurred'});
+                res.end("{'error':'An error has occurred'}");
             } else {
-                console.log('' + result + ' document(s) updated');
-                res.end(item);
+                console.log(result + ' document(s) updated');
+                res.end(JSON.stringify(item));
             }
         });
     });
@@ -78,27 +79,38 @@ function updateItems(u, req, res) {
 function getItems(u, req, res){
     var collection = u.query.collection;
     var items = u.query.items.split(",");
+    for(var i = 0; i < items.length; i++){
+        items[i] = mongo.ObjectID(items[i]);
+    }
     var cursor = db.collection(collection).find( {_id:{ $in: items }}).toArray(function(err, items) {
-        res.end(JSON.stringify(items));
-        db.close();
+        if (err) {
+            res.end("{'error':'An error has occurred - " + err + "'}");
+        } else {
+            res.end(JSON.stringify(items));
+        }
     });
 }
 
 function deleteItems(u, req, res) {
     var collection = u.query.collection;
-    var id = req.params.id;
-    console.log('Deleting item: ' + id);
+    var id = u.query.items || req.body;
+    if(!Array.isArray(id)){
+        id = [id];
+    }
+    console.log('Deleting item(s): ' + id);
+    for(var i = 0; i < id.length; i++){
+        id[i] = mongo.ObjectID(id[i]);
+    }
     db.collection(collection, function(err, collection) {
-        collection.remove({'_id':new BSON.ObjectID(id)}, {safe:true}, function(err, result) {
+        collection.remove({_id:{ $in: id }}, {safe:true}, function(err, result) {
             if (err) {
-                res.end({'error':'An error has occurred - ' + err});
+                res.end("{'error':'An error has occurred - " + err + "'}");
             } else {
-                console.log('' + result + ' document(s) deleted');
-                res.end(req.body);
+                console.log(result + ' document(s) deleted');
+                res.end('{"deleted":' + result + '}');
             }
         });
     });
 }
 
 http.createServer(app).listen(port, ipaddr);
-console.log("Server running at http://" + ipaddr + ":" + port + "/");
