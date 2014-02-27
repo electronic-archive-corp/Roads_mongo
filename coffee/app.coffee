@@ -28,7 +28,23 @@ db = new mongo.Db("Podvig", server,
   numberOfRetries: -1
   auto_reconnect: false
 )
+
+openDB = ->
+    db.open (err, db) ->
+        if err
+            err = new Error(String(err))  unless err instanceof Error
+            err.message = "Error connecting to database: " + err.message
+
+            #throw err;
+            return
+        if options.username and options.password
+            db.authenticate options.username, options.password, ->
+
+        console.log " Connected to db!"
+        connected = true
+
 openDB()
+
 db.on "close", (error) ->
   connected = false
   console.log "Connection to the database was closed!"
@@ -81,20 +97,6 @@ app.use (req, res) ->
     "Content-Type": "text/plain"
 
   res.end "Hello World\n"
-
-openDB = ->
-    db.open (err, db) ->
-        if err
-            err = new Error(String(err))  unless err instanceof Error
-            err.message = "Error connecting to database: " + err.message
-
-            #throw err;
-            return
-        if options.username and options.password
-            db.authenticate options.username, options.password, ->
-
-        console.log " Connected to db!"
-        connected = true
 
 addItems = (u, req, res) ->
     collection = u.query.collection
